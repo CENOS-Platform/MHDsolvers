@@ -1,4 +1,4 @@
-# About
+# Branch LMS-1.0-feature-freeze
 * MHD solvers are modified OpenFOAM v10 solvers (See [OpenFOAM GitHub repository](https://github.com/OpenFOAM/OpenFOAM-10)).
 * The solvers are to be used with [EOF-Library](https://github.com/jvencels/EOF-Library). Prerequisites are [OpenFOAM v10](https://openfoam.org/version/10/) and [Elmer FEM](https://www.csc.fi/web/elmer) software.
 * To install all solvers, just execute ./Allwmake in a bash terminal of a properly prepared Linux environment.
