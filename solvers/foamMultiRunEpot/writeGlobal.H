@@ -23,10 +23,7 @@ forAll(regionNames, i)
 }
 UGlobal.correctBoundaryConditions();
 UGlobal.write();
-if (!solidificationGlobalEnabled)
-{
-    TGlobal.correctBoundaryConditions();
-}
+TGlobal.correctBoundaryConditions();
 TGlobal.write();
 pGlobal.correctBoundaryConditions();
 pGlobal.write();
