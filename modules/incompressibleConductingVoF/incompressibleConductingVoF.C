@@ -286,25 +286,73 @@ void Foam::solvers::incompressibleConductingVoF::solveElectromagnetics()
 
 void Foam::solvers::incompressibleConductingVoF::fixCurrentsWithMixtureConductivity()
 {
+    // The received current already carries the mixture conductivity
+    // (alpha*sigma), so only rescale it for interface motion since the last
+    // exchange. Rebuilding from the stored copy keeps repeated calls from
+    // compounding the alpha weighting. Before any exchange, J is left as is.
+    if (!JReceivedRe_.valid() || !alphaReceived_.valid())
+    {
+        return;
+    }
     volScalarField alpha = getAlpha1();
     volScalarField a("emAlpha", min(max(alpha, scalar(0)), scalar(1)));
-    
-    volVectorField new_Jre = electro.J()*a;
+    volScalarField ratio("emAlphaRatio", a/max(alphaReceived_(), scalar(1e-3)));
+
+    volVectorField new_Jre = JReceivedRe_()*ratio;
     volVectorField& Jre = getJ();
     forAll(new_Jre, cellI)
     {
         Jre[cellI] = new_Jre[cellI];
     }
     Jre.correctBoundaryConditions();
-    if (electro.isComplex())
+    if (electro.isComplex() && JReceivedIm_.valid())
     {
-        volVectorField new_Jim = electro.J(true)*a;
+        volVectorField new_Jim = JReceivedIm_()*ratio;
         volVectorField& Jim = getJ(true);
         forAll(new_Jim, cellI)
         {
             Jim[cellI] = new_Jim[cellI];
         }
         Jim.correctBoundaryConditions();
+    }
+}
+
+void Foam::solvers::incompressibleConductingVoF::storeReceivedCurrents(bool imaginary)
+{
+    autoPtr<volVectorField>& JReceived = imaginary ? JReceivedIm_ : JReceivedRe_;
+    JReceived.reset
+    (
+        new volVectorField
+        (
+            IOobject
+            (
+                imaginary ? "JReceivedIm" : "JReceivedRe",
+                runTime.name(),
+                mesh,
+                IOobject::NO_READ,
+                IOobject::NO_WRITE
+            ),
+            getJ(imaginary)
+        )
+    );
+    if (!imaginary)
+    {
+        volScalarField alpha = getAlpha1();
+        alphaReceived_.reset
+        (
+            new volScalarField
+            (
+                IOobject
+                (
+                    "alphaReceived",
+                    runTime.name(),
+                    mesh,
+                    IOobject::NO_READ,
+                    IOobject::NO_WRITE
+                ),
+                min(max(alpha, scalar(0)), scalar(1))
+            )
+        );
     }
 }
 
