@@ -296,7 +296,12 @@ void Foam::solvers::incompressibleConductingVoF::fixCurrentsWithMixtureConductiv
     }
     volScalarField alpha = getAlpha1();
     volScalarField a("emAlpha", min(max(alpha, scalar(0)), scalar(1)));
-    volScalarField ratio("emAlphaRatio", a/max(alphaReceived_(), scalar(1e-3)));
+    // Capped at 1: a cell that was nearly gas at the exchange must not amplify J
+    volScalarField ratio
+    (
+        "emAlphaRatio",
+        min(a/max(alphaReceived_(), scalar(1e-3)), scalar(1))
+    );
 
     volVectorField new_Jre = JReceivedRe_()*ratio;
     volVectorField& Jre = getJ();
@@ -354,6 +359,64 @@ void Foam::solvers::incompressibleConductingVoF::storeReceivedCurrents(bool imag
             )
         );
     }
+}
+
+Foam::tmp<Foam::volScalarField::Internal>
+Foam::solvers::incompressibleConductingVoF::emForceLimiter()
+{
+    // Elmer's current does not follow alpha on this mesh near the interface,
+    // and the small mixture density would turn it into a huge acceleration.
+    // The limit comes from melt cells, where J does follow alpha. It uses the
+    // unlimited force, so the limiter does not feed back on itself.
+    const scalar meltAlpha = 0.9;
+    const scalar gasAlphaCutoff = 1e-4;
+
+    const volScalarField alpha(getAlpha1());
+    const vectorField& JxB = electro.JxB();
+    const scalarField magF(mag(JxB));
+    const scalarField& rhoc = rho.primitiveField();
+
+    scalar peak = 0;
+    forAll(magF, cellI)
+    {
+        if (alpha[cellI] >= meltAlpha)
+        {
+            peak = max(peak, magF[cellI]/rhoc[cellI]);
+        }
+    }
+    reduce(peak, maxOp<scalar>());
+
+    if (runTime.timeIndex() != emAccelerationTimeIndex_)
+    {
+        emAccelerationLimit_ = emAccelerationCurrent_;
+        emAccelerationTimeIndex_ = runTime.timeIndex();
+    }
+    emAccelerationCurrent_ = peak;
+    const scalar limit =
+        emAccelerationLimit_ > 0 ? emAccelerationLimit_ : peak;
+
+    tmp<volScalarField::Internal> tweight
+    (
+        volScalarField::Internal::New
+        (
+            "emForceLimiter",
+            mesh,
+            dimensionedScalar(dimless, 1)
+        )
+    );
+    scalarField& weight = tweight.ref();
+    forAll(weight, cellI)
+    {
+        if (alpha[cellI] < gasAlphaCutoff)
+        {
+            weight[cellI] = 0;
+        }
+        else if (magF[cellI] > rhoc[cellI]*limit)
+        {
+            weight[cellI] = rhoc[cellI]*limit/magF[cellI];
+        }
+    }
+    return tweight;
 }
 
 // ************************************************************************* //

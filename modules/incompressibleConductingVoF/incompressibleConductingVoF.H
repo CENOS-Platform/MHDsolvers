@@ -110,6 +110,13 @@ protected:
         autoPtr<volVectorField> JReceivedIm_;
         autoPtr<volScalarField> alphaReceived_;
 
+        //- Melt peak of |JxB|/rho at the previous time step (limit for
+        //  emForceLimiter), and the same peak for the current time step.
+        //  Negative until the first step has been evaluated.
+        scalar emAccelerationLimit_ = -1;
+        scalar emAccelerationCurrent_ = -1;
+        label emAccelerationTimeIndex_ = -1;
+
 
     // Pressure reference
 
@@ -239,6 +246,10 @@ public:
         //- Store the just-received current density (and alpha1) as the
         //  reference for fixCurrentsWithMixtureConductivity
         virtual void storeReceivedCurrents(bool imaginary=false);
+
+        //- Cell factor on JxB limiting the acceleration to the melt peak of
+        //  the previous time step, with no force in near-pure gas cells
+        tmp<volScalarField::Internal> emForceLimiter();
 
 
     // Member Operators
